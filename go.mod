@@ -33,4 +33,4 @@ require (
 	google.golang.org/protobuf v1.33.0 // indirect
 )
 
-replace github.com/zmap/zgrab2 => github.com/scovery/zgrab2 v0.0.0-20240814175049-4430177d01b5
+replace github.com/zmap/zgrab2 => github.com/scovery/zgrab2 a01cb4c6d08f429a5e646d3cbf624012fe2a9fc0
