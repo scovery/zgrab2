@@ -2,8 +2,8 @@ package weakcs
 
 import (
 	"errors"
+	"github.com/scovery/zgrab2"
 	"github.com/zmap/zcrypto/tls"
-	"github.com/zmap/zgrab2"
 	"log"
 	"slices"
 )
