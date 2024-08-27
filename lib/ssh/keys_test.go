@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zmap/zgrab2/lib/ssh/testdata"
+	"github.com/scovery/zgrab2/lib/ssh/testdata"
 	"golang.org/x/crypto/ed25519"
 )
 

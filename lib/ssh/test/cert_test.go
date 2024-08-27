@@ -11,7 +11,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/zmap/zgrab2/lib/ssh"
+	"github.com/scovery/zgrab2/lib/ssh"
 )
 
 func DISABLED_TestCertLogin(t *testing.T) {

@@ -30,8 +30,8 @@ import (
 	"golang.org/x/text/unicode/norm"
 	"golang.org/x/text/width"
 
+	"github.com/scovery/zgrab2"
 	"github.com/zmap/zcrypto/tls"
-	"github.com/zmap/zgrab2"
 )
 
 const (
