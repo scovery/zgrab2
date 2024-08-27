@@ -1,7 +1,7 @@
 package modules
 
 import (
-	"github.com/zmap/zgrab2/modules/weakcs"
+	"github.com/scovery/zgrab2/modules/weakcs"
 )
 
 func init() {
