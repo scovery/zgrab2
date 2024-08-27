@@ -9,6 +9,7 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/zmap/zcrypto v0.0.0-20230310154051-c8b263fd8300
 	github.com/zmap/zflags v1.4.0-beta.1.0.20200204220219-9d95409821b6
+	github.com/zmap/zgrab2 v0.1.8
 	golang.org/x/crypto v0.23.0
 	golang.org/x/net v0.25.0
 	golang.org/x/sys v0.20.0

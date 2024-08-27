@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/scovery/zgrab2/lib/smb/gss"
-	"github.com/scovery/zgrab2/lib/smb/ntlmssp"
-	"github.com/scovery/zgrab2/lib/smb/smb/encoder"
+	"github.com/zmap/zgrab2/lib/smb/gss"
+	"github.com/zmap/zgrab2/lib/smb/ntlmssp"
+	"github.com/zmap/zgrab2/lib/smb/smb/encoder"
 )
 
 const ProtocolSmb = "\xFFSMB"

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/scovery/zgrab2/lib/http"
+	. "github.com/zmap/zgrab2/lib/http"
 )
 
 var sniffTests = []struct {

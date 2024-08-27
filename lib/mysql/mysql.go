@@ -22,8 +22,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/scovery/zgrab2"
 	log "github.com/sirupsen/logrus"
+	"github.com/zmap/zgrab2"
 	"io"
 	"time"
 )

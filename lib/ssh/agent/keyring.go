@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/scovery/zgrab2/lib/ssh"
+	"github.com/zmap/zgrab2/lib/ssh"
 )
 
 type privKey struct {

@@ -27,9 +27,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scovery/zgrab2"
-	"github.com/scovery/zgrab2/lib/http/httptrace"
 	"github.com/zmap/zcrypto/tls"
+	"github.com/zmap/zgrab2"
+	"github.com/zmap/zgrab2/lib/http/httptrace"
 	"golang.org/x/net/http/httpguts"
 )
 

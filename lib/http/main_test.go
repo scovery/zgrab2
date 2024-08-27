@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scovery/zgrab2/lib/http"
+	"github.com/zmap/zgrab2/lib/http"
 )
 
 var quietLog = log.New(ioutil.Discard, "", 0)

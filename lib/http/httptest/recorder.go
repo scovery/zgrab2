@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/scovery/zgrab2/lib/http"
+	"github.com/zmap/zgrab2/lib/http"
 )
 
 // ResponseRecorder is an implementation of http.ResponseWriter that
