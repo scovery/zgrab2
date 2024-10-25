@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/zmap/zcrypto/tls"
 	"github.com/zmap/zgrab2"
+	"io"
 	"log"
 	"slices"
 )
@@ -18,7 +19,9 @@ var protocolVersions = []string{
 
 type Flags struct {
 	zgrab2.BaseFlags
+	MaxRetries      int    `long:"max-retries" default:"1" description:"Number of times to retry attempt before giving up"`
 	ProtocolVersion string `short:"v" long:"protocol-version" default:"SSLv3" description:"protocol version"`
+	NoEnumeration   bool   `long:"no-enumeration" description:"do not enumerate weak cipher suites, stop at first accepted by the server"`
 	zgrab2.TLSFlags
 }
 
@@ -40,7 +43,7 @@ type Results struct {
 
 var NoMatchError = errors.New("pattern did not match")
 
-// RegisterModule is called by modules/banner.go to register the scanner.
+// RegisterModule is called by modules/weakcs.go to register the scanner.
 func RegisterModule() {
 	var m Module
 	_, err := zgrab2.AddCommand("weakcs", "WeakCS", m.Description(), 443, &m)
@@ -106,7 +109,6 @@ func (s *Scanner) Init(flags zgrab2.ScanFlags) error {
 	s.config = f
 	// sets up config for tls flags
 	if s.config.Config == nil {
-		//TODO: use the tlsFlags instead of doing this ? See if it works
 		s.config.Config = &tls.Config{
 			ForceSuites:        true,
 			InsecureSkipVerify: true,
@@ -119,25 +121,72 @@ func (s *Scanner) Init(flags zgrab2.ScanFlags) error {
 }
 
 func (s *Scanner) Scan(target zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}, error) {
-	conn, err := target.OpenTLS(&s.config.BaseFlags, &s.config.TLSFlags)
+	var (
+		enumeratedCS []tls.CipherSuite
+		conn         *zgrab2.TLSConnection
+		err          error
+		result       Results
+		try          = -1
+	)
+	for try < s.config.MaxRetries && len(s.config.Config.CipherSuites) > 0 {
+		try++
+		conn, err = target.OpenTLS(&s.config.BaseFlags, &s.config.TLSFlags)
+		if conn == nil || err != nil {
+			// these are not "real" server errors; the server picked a CS which is just not handled by zcrypto
+			if !errors.Is(tls.ErrUnimplementedCipher, err) && !errors.Is(tls.ErrNoMutualCipher, err) {
+				if errors.Is(io.EOF, err) {
+					// in most cases, only retrying when getting EOF gives a different outcome
+					continue
+				}
+				break
+			}
+		} else {
+			serverAcceptedCipher, ok := getServerAcceptedCipher(conn)
+			if !ok { // the whole cipher list is rejected by the server
+				defer conn.Close()
+				break
+			}
+			enumeratedCS = append(enumeratedCS, serverAcceptedCipher)
+			if s.config.NoEnumeration { // if the enumeration mode is disabled, stop at the first accepted cipher.
+				defer conn.Close()
+				break
+			}
+			s.config.Config.CipherSuites = popCipherFromList(s.config.Config.CipherSuites, uint16(serverAcceptedCipher))
+			try = 0 // initializing retries again since we are going to perform a new handshake with a different cs list
+		}
 
-	if conn == nil || err != nil {
-		return zgrab2.TryGetScanStatus(err), nil, err
-	} else {
-		defer conn.Close()
 	}
-
-	var results Results
-
-	if hsLog := conn.GetHandshakeLog(); hsLog != nil {
-		if serverHello := hsLog.ServerHello; serverHello != nil {
-			weakSupportedCS := serverHello.CipherSuite
-			results.WeakProtocol = s.config.ProtocolVersion != "TLSv1.2" && s.config.ProtocolVersion != "TLSv1.3"
-			results.WeakCipher = true
-			results.WeakSupportedCS = append(results.WeakSupportedCS, weakSupportedCS)
-			results.ProtocolVersion = s.config.ProtocolVersion
-			return zgrab2.SCAN_SUCCESS, results, nil
+	if err != nil && len(enumeratedCS) == 0 {
+		if !errors.Is(tls.ErrUnimplementedCipher, err) && !errors.Is(tls.ErrNoMutualCipher, err) {
+			return zgrab2.TryGetScanStatus(err), nil, err
 		}
 	}
-	return zgrab2.SCAN_SUCCESS, nil, NoMatchError
+	if len(enumeratedCS) == 0 { // server did not accept any of the weak ciphers
+		return zgrab2.SCAN_SUCCESS, nil, NoMatchError
+	}
+	result = Results{
+		WeakProtocol:    s.config.ProtocolVersion != "TLSv1.2" && s.config.ProtocolVersion != "TLSv1.3",
+		WeakCipher:      true,
+		ProtocolVersion: s.config.ProtocolVersion,
+		WeakSupportedCS: enumeratedCS,
+	}
+	return zgrab2.SCAN_SUCCESS, result, nil
+}
+
+func getServerAcceptedCipher(conn *zgrab2.TLSConnection) (tls.CipherSuite, bool) {
+	if hsLog := conn.GetHandshakeLog(); hsLog != nil {
+		if serverHello := hsLog.ServerHello; serverHello != nil {
+			return serverHello.CipherSuite, true
+		}
+	}
+	return 0x0, false
+}
+
+func popCipherFromList(clientCipherList []uint16, acceptedCipher uint16) []uint16 {
+	for i, cipher := range clientCipherList {
+		if cipher == acceptedCipher {
+			return append(clientCipherList[:i], clientCipherList[i+1:]...)
+		}
+	}
+	return clientCipherList
 }
