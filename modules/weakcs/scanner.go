@@ -162,7 +162,7 @@ func (s *Scanner) Scan(target zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}
 		}
 	}
 	if len(enumeratedCS) == 0 { // server did not accept any of the weak ciphers
-		return zgrab2.SCAN_SUCCESS, nil, NoMatchError
+		return zgrab2.TryGetScanStatus(NoMatchError), nil, NoMatchError
 	}
 	result = Results{
 		WeakProtocol:    s.config.ProtocolVersion != "TLSv1.2" && s.config.ProtocolVersion != "TLSv1.3",
