@@ -13,6 +13,7 @@
 package ntp
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
 	"github.com/zmap/zgrab2"
 )
 
@@ -436,16 +438,6 @@ func (when *NTPShort) Decode(buf []byte) error {
 	return nil
 }
 
-// decodeNTPShort decodes an NTPShort from the first 4 bytes of buf
-func decodeNTPShort(buf []byte) (*NTPShort, error) {
-	if len(buf) < 4 {
-		return nil, ErrBufferTooSmall
-	}
-	ret := NTPShort{}
-	err := ret.Decode(buf)
-	return &ret, err
-}
-
 // Encode encodes the NTPShort according to RFC5905 -- upper 16 bits the seconds, lower 16 bits the fractional seconds (big endian)
 func (when *NTPShort) Encode() []byte {
 	ret := make([]byte, 4)
@@ -527,16 +519,6 @@ func (when *NTPLong) Decode(buf []byte) error {
 	when.Seconds = binary.BigEndian.Uint32(buf[0:4])
 	when.Fraction = binary.BigEndian.Uint32(buf[4:8])
 	return nil
-}
-
-// decodeNTPLong decodes an NTPShort from the first 8 bytes of buf
-func decodeNTPLong(buf []byte) (*NTPLong, error) {
-	if len(buf) < 8 {
-		return nil, ErrBufferTooSmall
-	}
-	ret := NTPLong{}
-	err := ret.Decode(buf)
-	return &ret, err
 }
 
 // Encode encodes the NTPShort according to RFC5905 -- upper 32 bits the seconds, lower 32 bits the fractional seconds (big endian)
@@ -793,14 +775,12 @@ type Results struct {
 
 // Flags holds the command-line flags for the scanner.
 type Flags struct {
-	zgrab2.BaseFlags
-	zgrab2.UDPFlags
-	Verbose       bool   `long:"verbose" description:"More verbose logging, include debug fields in the scan results"`
-	Version       uint8  `long:"version" description:"The version number to pass to the Server." default:"3"`
-	LeapIndicator uint8  `long:"leap-indicator" description:"The LI value to pass to the Server. Default 3 (Unknown)"`
-	SkipGetTime   bool   `long:"skip-get-time" description:"If set, don't request the Server time"`
-	MonList       bool   `long:"monlist" description:"Perform a ReqMonGetList request"`
-	RequestCode   string `long:"request-code" description:"Specify a request code for MonList other than ReqMonGetList" default:"REQ_MON_GETLIST"`
+	zgrab2.BaseFlags `group:"Basic Options"`
+	Version          uint8  `long:"version" description:"The version number to pass to the Server." default:"3"`
+	LeapIndicator    uint8  `long:"leap-indicator" description:"The LI value to pass to the Server. Default 3 (Unknown)"`
+	SkipGetTime      bool   `long:"skip-get-time" description:"If set, don't request the Server time"`
+	MonList          bool   `long:"monlist" description:"Perform a ReqMonGetList request"`
+	RequestCode      string `long:"request-code" description:"Specify a request code for MonList other than ReqMonGetList" default:"REQ_MON_GETLIST"`
 }
 
 // Module is the zgrab2 module implementation
@@ -809,20 +789,21 @@ type Module struct {
 
 // Scanner holds the state for a single scan
 type Scanner struct {
-	config *Flags
+	config            *Flags
+	dialerGroupConfig *zgrab2.DialerGroupConfig
 }
 
 // RegisterModule registers the module with zgrab2
 func RegisterModule() {
 	var module Module
-	_, err := zgrab2.AddCommand("ntp", "NTP", module.Description(), 123, &module)
+	_, err := zgrab2.AddCommand("ntp", "Network Time Protocol (NTP)", module.Description(), 123, &module)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 // NewFlags returns a flags instant to be populated with the command line args
-func (module *Module) NewFlags() interface{} {
+func (module *Module) NewFlags() any {
 	return new(Flags)
 }
 
@@ -837,7 +818,7 @@ func (module *Module) Description() string {
 }
 
 // Validate checks that the flags are valid
-func (cfg *Flags) Validate(args []string) error {
+func (cfg *Flags) Validate(_ []string) error {
 	return nil
 }
 
@@ -850,6 +831,11 @@ func (cfg *Flags) Help() string {
 func (scanner *Scanner) Init(flags zgrab2.ScanFlags) error {
 	f, _ := flags.(*Flags)
 	scanner.config = f
+	scanner.dialerGroupConfig = &zgrab2.DialerGroupConfig{
+		TransportAgnosticDialerProtocol: zgrab2.TransportUDP,
+		NeedSeparateL4Dialer:            false,
+		BaseFlags:                       &f.BaseFlags,
+	}
 	return nil
 }
 
@@ -859,7 +845,7 @@ func (scanner *Scanner) InitPerSender(senderID int) error {
 }
 
 // Protocol returns the protocol identifer for the scanner.
-func (s *Scanner) Protocol() string {
+func (scanner *Scanner) Protocol() string {
 	return "ntp"
 }
 
@@ -871,6 +857,15 @@ func (scanner *Scanner) GetName() string {
 // GetTrigger returns the Trigger defined in the Flags.
 func (scanner *Scanner) GetTrigger() string {
 	return scanner.config.Trigger
+}
+
+func (scanner *Scanner) GetDialerGroupConfig() *zgrab2.DialerGroupConfig {
+	return scanner.dialerGroupConfig
+}
+
+// GetScanMetadata returns any metadata on the scan itself from this module.
+func (scanner *Scanner) GetScanMetadata() any {
+	return nil
 }
 
 // SendAndReceive is a rough version of ntpdc.c's doquery(), except it only supports a single packet response
@@ -1007,12 +1002,12 @@ func (scanner *Scanner) GetTime(sock net.Conn) (*NTPHeader, error) {
 // a valid NTP packet, then the result will be nil.
 // The presence of a DDoS-amplifying target can be inferred by
 // result.MonListReponse being present.
-func (scanner *Scanner) Scan(t zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}, error) {
-	sock, err := t.OpenUDP(&scanner.config.BaseFlags, &scanner.config.UDPFlags)
+func (scanner *Scanner) Scan(ctx context.Context, dialGroup *zgrab2.DialerGroup, target *zgrab2.ScanTarget) (zgrab2.ScanStatus, any, error) {
+	sock, err := dialGroup.Dial(ctx, target)
 	if err != nil {
-		return zgrab2.TryGetScanStatus(err), nil, err
+		return zgrab2.TryGetScanStatus(err), nil, fmt.Errorf("could not connect to target %s: %w", target.String(), err)
 	}
-	defer sock.Close()
+	defer zgrab2.CloseConnAndHandleError(sock)
 	result := &Results{}
 	if !scanner.config.SkipGetTime {
 		inPacket, err := scanner.GetTime(sock)

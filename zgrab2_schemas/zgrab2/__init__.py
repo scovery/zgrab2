@@ -4,6 +4,8 @@ from . import dnp3
 from . import fox
 from . import ftp
 from . import http
+from . import managesieve
+from . import memcached
 from . import modbus
 from . import mongodb
 from . import mssql
@@ -14,6 +16,7 @@ from . import oracle
 from . import pop3
 from . import postgres
 from . import redis
+from . import rdp
 from . import siemens
 from . import smb
 from . import smtp
@@ -23,3 +26,6 @@ from . import ipp
 from . import banner
 from . import amqp091
 from . import weakcs
+from . import socks5
+from . import mqtt
+from . import pptp
