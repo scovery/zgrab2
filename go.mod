@@ -4,7 +4,6 @@ go 1.25.0
 
 toolchain go1.25.8
 
-
 require (
 	github.com/censys/cidranger v1.1.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7

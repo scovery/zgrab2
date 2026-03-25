@@ -1,11 +1,13 @@
 package weakcs
 
 import (
+	"context"
 	"errors"
 	"github.com/zmap/zcrypto/tls"
 	"github.com/zmap/zgrab2"
 	"io"
 	"log"
+	"net"
 	"slices"
 )
 
@@ -31,7 +33,8 @@ type Module struct {
 
 // Scanner is the implementation of the zgrab2.Scanner interface.
 type Scanner struct {
-	config *Flags
+	config            *Flags
+	dialerGroupConfig *zgrab2.DialerGroupConfig
 }
 
 type Results struct {
@@ -107,6 +110,12 @@ func (s *Scanner) Init(flags zgrab2.ScanFlags) error {
 	//var err error
 	f, _ := flags.(*Flags)
 	s.config = f
+	s.dialerGroupConfig = &zgrab2.DialerGroupConfig{
+		TransportAgnosticDialerProtocol: zgrab2.TransportTCP,
+		BaseFlags:                       &f.BaseFlags,
+		TLSEnabled:                      true,
+		TLSFlags:                        &f.TLSFlags,
+	}
 	// sets up config for tls flags
 	if s.config.Config == nil {
 		s.config.Config = &tls.Config{
@@ -120,7 +129,15 @@ func (s *Scanner) Init(flags zgrab2.ScanFlags) error {
 	return nil
 }
 
-func (s *Scanner) Scan(target zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}, error) {
+func (s *Scanner) GetDialerGroupConfig() *zgrab2.DialerGroupConfig {
+	return s.dialerGroupConfig
+}
+
+func (s *Scanner) GetScanMetadata() any {
+	return nil
+}
+
+func (s *Scanner) Scan(ctx context.Context, dialerGroup *zgrab2.DialerGroup, target *zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}, error) {
 	var (
 		enumeratedCS []tls.CipherSuite
 		conn         *zgrab2.TLSConnection
@@ -130,7 +147,13 @@ func (s *Scanner) Scan(target zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}
 	)
 	for try < s.config.MaxRetries && len(s.config.Config.CipherSuites) > 0 {
 		try++
-		conn, err = target.OpenTLS(&s.config.BaseFlags, &s.config.TLSFlags)
+		var rawConn net.Conn
+		rawConn, err = dialerGroup.Dial(ctx, target)
+		if rawConn != nil {
+			conn, _ = rawConn.(*zgrab2.TLSConnection)
+		} else {
+			conn = nil
+		}
 		if conn == nil || err != nil {
 			// these are not "real" server errors; the server picked a CS which is just not handled by zcrypto
 			if !errors.Is(tls.ErrUnimplementedCipher, err) && !errors.Is(tls.ErrNoMutualCipher, err) {
@@ -151,7 +174,7 @@ func (s *Scanner) Scan(target zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}
 				defer conn.Close()
 				break
 			}
-			s.config.Config.CipherSuites = popCipherFromList(s.config.Config.CipherSuites, uint16(serverAcceptedCipher))
+			s.config.Config.CipherSuites = popCipherFromList(s.config.Config.CipherSuites, uint16(serverAcceptedCipher.ID))
 			try = 0 // initializing retries again since we are going to perform a new handshake with a different cs list
 		}
 
@@ -176,10 +199,10 @@ func (s *Scanner) Scan(target zgrab2.ScanTarget) (zgrab2.ScanStatus, interface{}
 func getServerAcceptedCipher(conn *zgrab2.TLSConnection) (tls.CipherSuite, bool) {
 	if hsLog := conn.GetHandshakeLog(); hsLog != nil {
 		if serverHello := hsLog.ServerHello; serverHello != nil {
-			return serverHello.CipherSuite, true
+			return tls.CipherSuite{ID: uint16(serverHello.CipherSuite)}, true
 		}
 	}
-	return 0x0, false
+	return tls.CipherSuite{}, false
 }
 
 func popCipherFromList(clientCipherList []uint16, acceptedCipher uint16) []uint16 {
