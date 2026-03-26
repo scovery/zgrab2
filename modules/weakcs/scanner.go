@@ -22,7 +22,7 @@ var protocolVersions = []string{
 type Flags struct {
 	zgrab2.BaseFlags
 	MaxRetries      int    `long:"max-retries" default:"1" description:"Number of times to retry attempt before giving up"`
-	ProtocolVersion string `short:"v" long:"protocol-version" default:"SSLv3" description:"protocol version"`
+	ProtocolVersion string `short:"e" long:"protocol-version" default:"SSLv3" description:"protocol version"`
 	NoEnumeration   bool   `long:"no-enumeration" description:"do not enumerate weak cipher suites, stop at first accepted by the server"`
 	zgrab2.TLSFlags
 }
